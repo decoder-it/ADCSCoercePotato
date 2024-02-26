@@ -1,5 +1,5 @@
 # ADCSCoercePotato
-Another machine authentication coerce technique but specific ADCS server
+Yet another technique for coercing machine authentication but specific for ADCS server
 ```
 ADCSCoercePotato
 - @decoder_it 2024
